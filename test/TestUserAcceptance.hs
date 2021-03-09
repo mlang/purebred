@@ -129,6 +129,7 @@ main = do
       , testReloadsThreadListAfterReply
       , testAbortsCompositionIfEditorExits
       , testReplyRendersNonASCIIHeadersCorrectly
+      , testGroupReply
       ]
 
 -- https://github.com/purebred-mua/purebred/issues/336
@@ -988,6 +989,7 @@ testRepliesToMailSuccessfully = purebredTmuxSession "replies to mail successfull
 
     assertRegexS "From: \"Joe Bloggs\" <joe@foo.test>\\s+$"
     assertSubstringS "To: frase@host.example"
+    assertRegexS "Cc:\\s*$"  -- Cc should be empty
     assertSubstringS ("Subject: Re: " <> subject)
 
     -- https://github.com/purebred-mua/purebred/issues/379
@@ -1641,6 +1643,30 @@ testReplyRendersNonASCIIHeadersCorrectly =
     step "exit vim"
     sendLine ": x" (Substring "Attachments") >>= put
     assertRegexS $ T.encodeUtf8 "To: \"Róman Joost\" <roman@bromeco.de>"
+
+testGroupReply :: PurebredTestCase
+testGroupReply =
+  purebredTmuxSession "group reply Cc's recipients of parent" $ \step -> do
+    startApplication
+    step "focus search edit"
+    sendKeys ":" (Regex (buildAnsiRegex [] ["37"] [] <> "tag"))
+
+    step "delete all input"
+    sendKeys "C-u" (Regex ("Query: " <> buildAnsiRegex [] ["37"] []))
+
+    step "search for msg <20170817035004.55C4580B8F@host.example>"
+    sendLine "id:20170817035004.55C4580B8F@host.example" (Substring "Item 1 of 1")
+
+    step "open thread"
+    sendKeys "Enter" (Substring "This is a test mail for purebred")
+
+    step "start replying"
+    sendKeys "R" (Substring "> This is a test mail for purebred")
+
+    step "exit vim"
+    sendLine ": x" (Substring "Attachments") >>= put
+    assertRegexS $ T.encodeUtf8 "To: frase@host.example"
+    assertRegexS $ T.encodeUtf8 "Cc: roman@host.example, joe@host.example"
 
 findMail ::
      ( HasTmuxSession testEnv
